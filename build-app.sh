@@ -10,7 +10,7 @@ cd "${0:A:h}"
 swift run -c release fnbcheck Tests
 
 APP="dist/FNB58 Monitor.app"
-rm -rf "$APP" dist/*.dmg
+rm -rf "$APP" dist/FNB58-Monitor-Universal.dmg dist/FNB58-Monitor-AppleSilicon.dmg
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
