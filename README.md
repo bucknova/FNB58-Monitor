@@ -16,9 +16,29 @@ This is an independent project, not affiliated with or endorsed by FNIRSI.
 - **Command console:** send a raw command, with the length and checksum added for you
 - **Appearance:** Auto, Light, and Dark, with Liquid Glass on macOS 26 and later
 
-## Build
+## Download
 
-You need macOS 14 or later and the Xcode command line tools. Full Xcode isn't required.
+Tagged versions are published on the [Releases page](https://github.com/bucknova/FNB58-Monitor/releases) in two forms:
+
+- **`FNB58-Monitor-AppleSilicon.dmg`:** smaller, for Macs with an M-series chip
+- **`FNB58-Monitor-Universal.dmg`:** for both Apple Silicon and Intel Macs
+
+Every push to `main` also builds both, available from that run's artifacts on the [Actions page](https://github.com/bucknova/FNB58-Monitor/actions) to anyone signed in to GitHub.
+
+Open the DMG and drag the app to Applications. These builds are ad-hoc signed rather than signed with an Apple Developer ID, so macOS blocks them the first time. To open one, either:
+
+- Try opening the app, then go to **System Settings > Privacy & Security** and choose **Open Anyway**.
+- Or, if macOS says the app is damaged, remove the download flag in Terminal, but only for a copy you got from this repository:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/FNB58 Monitor.app"
+```
+
+When macOS asks for Bluetooth access, choose **Allow**, and turn on Bluetooth on your tester.
+
+## Build from source
+
+You need macOS 14 or later and the Xcode command line tools. Full Xcode isn't required. Liquid Glass needs a macOS 26 or later SDK.
 
 ```bash
 git clone https://github.com/bucknova/FNB58-Monitor.git
@@ -32,9 +52,7 @@ cd FNB58-Monitor
 ./build-app.sh
 ```
 
-This runs the protocol checks against recordings from a real tester, then creates `dist/FNB58 Monitor.app`. Open it, choose **Allow** when macOS asks for Bluetooth access, and turn on Bluetooth on your tester.
-
-There's no prebuilt download yet. The build is ad-hoc signed rather than signed with an Apple Developer ID, so a copy built on another Mac would trigger a Gatekeeper warning.
+This runs the protocol checks against recordings from a real tester, then creates a universal `dist/FNB58 Monitor.app` and both DMGs in `dist/`.
 
 ## Status
 
@@ -47,6 +65,7 @@ Tested on one FNB58 with firmware v1.15, on macOS 27.
 | Automatic reconnect after a tester restart | Not yet tested in the app |
 | Hover readouts, Reset session, and raw log export | Not yet tested on hardware |
 | macOS 14 to 25 | Not tested |
+| Intel Macs | Builds, not tested on an Intel Mac |
 | Fast-charge trigger and release | Commands documented, available only through the console, untested |
 | Clearing a stored group | Command documented, available only through the console, untested |
 | Tester settings and other toolbox tools | No known remote command |
