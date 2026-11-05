@@ -27,19 +27,16 @@ private func dyn(_ dark: UInt32, _ light: UInt32) -> Color {
 }
 
 enum P {
-    static let bg = Color(nsColor: .windowBackgroundColor)
-    static let card = Color(nsColor: .controlBackgroundColor)
-    static let plot = dyn(0x191B1E, 0xF7F7F5)
-    static let line = dyn(0x303338, 0xDADAD6)
-    static let grid = dyn(0x2C2F34, 0xE6E6E2)
-    static let ctl = dyn(0x484C53, 0xB4B6BA)
-    static let ctlOn = dyn(0x8A8E95, 0x6B6E74)
+    static let window = Color(nsColor: .windowBackgroundColor)
+    static let card = Color(nsColor: .quaternarySystemFill)
+    static let line = Color(nsColor: .separatorColor)
+    static let grid = Color(nsColor: .separatorColor)
     static let fill = dyn(0x2C3036, 0xE7E8EA)
-    static let ink = dyn(0xF2F2F0, 0x1A1B1D)
-    static let strong = dyn(0xFFFFFF, 0x000000)
-    static let ink2 = dyn(0xD7D9DC, 0x3A3C40)
-    static let ink3 = dyn(0xBDBFC4, 0x55575C)
-    static let ink4 = dyn(0xA8ABB0, 0x62646A)
+    static let ink = Color.primary
+    static let strong = Color.primary
+    static let ink2 = Color.secondary
+    static let ink3 = Color.secondary
+    static let ink4 = Color.secondary
     static let series1 = dyn(0x5AA9FF, 0x1F6FD1)
     static let series2 = dyn(0xE8793F, 0xC4501C)
     static let ok = dyn(0x4CC38A, 0x1A8F5A)
@@ -61,7 +58,6 @@ struct Card<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(P.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(P.line))
     }
 }
 

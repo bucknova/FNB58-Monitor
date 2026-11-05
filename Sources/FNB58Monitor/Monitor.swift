@@ -2,6 +2,9 @@ import AppKit
 import CoreBluetooth
 import FNBCore
 import Observation
+import os
+
+private let linkLog = Logger(subsystem: "local.fnb58monitor", category: "link")
 
 enum LinkState: Equatable {
     case starting, bluetoothOff, unauthorized, unsupported
@@ -27,6 +30,7 @@ enum LinkState: Equatable {
 @Observable
 final class UIState {
     var section = Section.live
+    var sidebarVisible = true
     var window = TimeWindow.s30
     var hover: CGFloat?
     var confirmReset = false
@@ -164,6 +168,7 @@ final class Monitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         guard let peripheral, let writeChar, isConnected else { return false }
         let type: CBCharacteristicWriteType = writeChar.properties.contains(.writeWithoutResponse) ? .withoutResponse : .withResponse
         session.noteOutgoing(Array(data), at: now)
+        linkLog.notice("tx \(Hex.string(data), privacy: .public) type=\(type.rawValue) canSend=\(peripheral.canSendWriteWithoutResponse) state=\(peripheral.state.rawValue)")
         peripheral.writeValue(data, for: writeChar, type: type)
         return true
     }
@@ -288,6 +293,7 @@ final class Monitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         }
         if isConnected, ticksSinceRSSI >= 10 {
             ticksSinceRSSI = 0
+            linkLog.notice("status link=\(String(describing: self.link), privacy: .public) frames=\(self.session.frameCount) notifying=\(self.notifyChar?.isNotifying ?? false)")
             peripheral?.readRSSI()
         }
         let waiting = link == .starting && Date().timeIntervalSince(epoch) > 5
@@ -319,11 +325,13 @@ final class Monitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             link = .noData
         case .handshaking where quiet > 8, .noData where quiet > 6 && !restartedForNoData:
             restartedForNoData = true
+            linkLog.notice("watchdog restart link=\(String(describing: self.link), privacy: .public) quiet=\(quiet)")
             sendStartSequence()
             lastDataAt = Date().addingTimeInterval(-6)
             link = .noData
         case .noData where quiet > 15:
             // Still silent after a restart. A fresh connection is the remaining option.
+            linkLog.notice("watchdog reconnect quiet=\(quiet)")
             if let peripheral { central.cancelPeripheralConnection(peripheral) }
         case .connecting where Date().timeIntervalSince(connectStartedAt) > 20:
             if let peripheral { central.cancelPeripheralConnection(peripheral) }
@@ -346,6 +354,7 @@ final class Monitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     // MARK: CBCentralManagerDelegate
 
     func centralManagerDidUpdateState(_ c: CBCentralManager) {
+        linkLog.notice("central state=\(c.state.rawValue)")
         switch c.state {
         case .poweredOn:
             if !userDisconnected, !isConnected, link != .connecting { startScan() }
@@ -386,6 +395,7 @@ final class Monitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func centralManager(_ c: CBCentralManager, didConnect p: CBPeripheral) {
+        linkLog.notice("connected")
         UserDefaults.standard.set(p.identifier.uuidString, forKey: Keys.device)
         notifyChar = nil
         writeChar = nil
@@ -401,6 +411,7 @@ final class Monitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func centralManager(_ c: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
+        linkLog.notice("disconnected link=\(String(describing: self.link), privacy: .public) frames=\(self.session.frameCount) error=\(error?.localizedDescription ?? "none", privacy: .public)")
         streamGeneration += 1
         pendingGroup = nil
         session.linkLost()
@@ -415,27 +426,35 @@ final class Monitor: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     // MARK: CBPeripheralDelegate
 
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
+        linkLog.notice("services \(p.services?.map(\.uuid.uuidString).joined(separator: ",") ?? "nil", privacy: .public) error=\(error?.localizedDescription ?? "none", privacy: .public)")
         for service in p.services ?? [] {
             p.discoverCharacteristics(nil, for: service)
         }
     }
 
     func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        linkLog.notice("chars \(service.uuid.uuidString, privacy: .public): \(service.characteristics?.map { "\($0.uuid.uuidString) notifying=\($0.isNotifying)" }.joined(separator: ",") ?? "nil", privacy: .public) error=\(error?.localizedDescription ?? "none", privacy: .public)")
         for ch in service.characteristics ?? [] {
             if ch.uuid == CBUUID(string: FNBProtocol.notifyCharacteristic) { notifyChar = ch }
             if ch.uuid == CBUUID(string: FNBProtocol.writeCharacteristic) { writeChar = ch }
         }
         if let notifyChar, writeChar != nil, !notifyChar.isNotifying {
+            linkLog.notice("subscribing")
             p.setNotifyValue(true, for: notifyChar)
         }
     }
 
     func peripheral(_ p: CBPeripheral, didUpdateNotificationStateFor ch: CBCharacteristic, error: Error?) {
+        linkLog.notice("notify state=\(ch.isNotifying) error=\(error?.localizedDescription ?? "none", privacy: .public)")
         if ch.isNotifying, error == nil { sendStartSequence() }
     }
 
     func peripheral(_ p: CBPeripheral, didUpdateValueFor ch: CBCharacteristic, error: Error?) {
-        guard error == nil, let value = ch.value else { return }
+        guard error == nil, let value = ch.value else {
+            linkLog.notice("rx error=\(error?.localizedDescription ?? "none", privacy: .public)")
+            return
+        }
+        if session.frameCount == 0 { linkLog.notice("first rx \(value.count) bytes") }
         session.feed(value, at: now)
     }
 
