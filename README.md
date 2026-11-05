@@ -14,7 +14,7 @@ This is an independent project, not affiliated with or endorsed by FNIRSI.
 - **Charger activity:** detected protocols, voltage steps up to the tester's 28 V range, and tester restarts
 - **Packet inspector:** the latest decoded and raw frame of each type, with checksum counts
 - **Command console:** send a raw command, with the length and checksum added for you
-- **Appearance:** Auto, Light, and Dark, with Liquid Glass on macOS 26 and later
+- **Appearance:** Auto, Light, and Dark, with a floating Liquid Glass sidebar on macOS 26 and later
 
 ## Download
 
@@ -72,6 +72,21 @@ Tested on one FNB58 with firmware v1.15, on macOS 27.
 | USB connection | Planned |
 
 Other FNIRSI models aren't supported. The app only connects to devices named `FNB58`.
+
+## Known issues
+
+- **No data after connecting:** rarely, the app may connect but receive no data. Quit and reopen it. This was seen once and hasn't been reproduced.
+- **"Looking for your tester":** the tester only accepts one connection at a time, so close anything else connected to it, including another copy of this app.
+- **Custom sidebar:** the native sidebar stays flush with the window on macOS 27, so the floating one is custom. It can't be resized by dragging its edge.
+- **Not yet confirmed:** dragging the window and scrolling under the toolbar since the redesign.
+
+If the no-data problem happens, this prints the app's Bluetooth log, which contains connection events and command bytes:
+
+```bash
+log show --last 1h --predicate 'subsystem == "local.fnb58monitor"'
+```
+
+[CHANGELOG.md](CHANGELOG.md) lists what changed in each version.
 
 ## Safety
 
