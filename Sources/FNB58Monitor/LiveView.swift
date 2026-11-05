@@ -282,8 +282,6 @@ struct MetricChart: View {
                             ctx.stroke(cross, with: .color(P.ink2), lineWidth: 1)
                         }
                     }
-                    .background(P.plot, in: RoundedRectangle(cornerRadius: 6))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
                     .onContinuousHover { phase in
                         switch phase {
                         case let .active(point): hover = max(0, min(1, point.x / max(1, geo.size.width)))

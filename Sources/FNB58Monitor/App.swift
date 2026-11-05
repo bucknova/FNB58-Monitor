@@ -33,10 +33,12 @@ struct FNB58MonitorApp: App {
                 .onAppear { delegate.monitor = monitor }
                 .frame(minWidth: 980, minHeight: 680)
         }
-        .windowToolbarStyle(.unified)
+        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1280, height: 900)
         .commands {
             CommandGroup(after: .sidebar) {
+                Button("Toggle Sidebar") { monitor.ui.sidebarVisible.toggle() }
+                    .keyboardShortcut("s", modifiers: [.control, .command])
                 ForEach(Array(Section.allCases.enumerated()), id: \.element) { index, item in
                     Button(item.rawValue) { monitor.ui.section = item }
                         .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
@@ -46,53 +48,37 @@ struct FNB58MonitorApp: App {
     }
 }
 
-/// Uses the native split view and toolbar, which draw Liquid Glass themselves on macOS 26 and later.
-/// Content stays on plain surfaces, because glass is meant for navigation and controls.
+/// macOS 27's native split view draws its sidebar flush with the window, so the floating sidebar is
+/// built here: an inset panel using the system's Liquid Glass material, beside plain content.
 struct RootView: View {
     @Environment(Monitor.self) private var monitor
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance = Appearance.auto.rawValue
+
+    private static let sidebarWidth: CGFloat = 212
+    private static let margin: CGFloat = 8
 
     var body: some View {
         @Bindable var ui = monitor.ui
-        NavigationSplitView {
-            List(Section.allCases, selection: Binding<Section?>(
-                get: { ui.section },
-                set: { if let value = $0 { ui.section = value } })
-            ) { item in
-                Label(item.rawValue, systemImage: item.symbol).tag(item)
+        ZStack(alignment: .topLeading) {
+            DetailColumn(leadingInset: ui.sidebarVisible ? Self.sidebarWidth + Self.margin : 0)
+            if ui.sidebarVisible {
+                FloatingSidebar(appearance: $appearance)
+                    .frame(width: Self.sidebarWidth)
+                    .padding(Self.margin)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
-            .safeAreaInset(edge: .bottom) {
-                Picker("Appearance", selection: $appearance) {
-                    ForEach(Appearance.allCases) { option in
-                        Text(option.label).tag(option.rawValue)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(12)
-            }
-        } detail: {
-            ScrollView {
-                VStack(spacing: 14) {
-                    LinkBanner()
-                    switch ui.section {
-                    case .live: LiveView()
-                    case .device: DeviceView()
-                    case .packets: PacketsView()
-                    case .control: ControlView()
-                    }
-                }
-                .padding(EdgeInsets(top: 12, leading: 20, bottom: 24, trailing: 20))
-            }
-            .background(P.bg)
-            .foregroundStyle(P.ink)
-            .font(.system(size: 14))
-            .navigationTitle(ui.section.rawValue)
-            .navigationSubtitle(monitor.connected?.name ?? "")
-            .toolbar { MonitorToolbar() }
         }
-        .onAppear { (Appearance(rawValue: appearance) ?? .auto).apply() }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: ui.sidebarVisible)
+        .background(P.window)
+        .ignoresSafeArea(.container, edges: .top)
+        .toolbar { MonitorToolbar() }
+        .chromelessToolbar()
+        .onAppear {
+            (Appearance(rawValue: appearance) ?? .auto).apply()
+            // With no title bar to grab, let empty background areas move the window.
+            NSApp.windows.forEach { $0.isMovableByWindowBackground = true }
+        }
         .onChange(of: appearance) { _, value in (Appearance(rawValue: value) ?? .auto).apply() }
         .alert("Something went wrong", isPresented: Binding(
             get: { monitor.errorMessage != nil },
@@ -105,6 +91,113 @@ struct RootView: View {
     }
 }
 
+struct SidebarToggle: View {
+    @Environment(Monitor.self) private var monitor
+
+    var body: some View {
+        Button {
+            monitor.ui.sidebarVisible.toggle()
+        } label: {
+            Image(systemName: "sidebar.left")
+                .frame(width: 22, height: 22)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(monitor.ui.sidebarVisible ? "Hide sidebar" : "Show sidebar")
+    }
+}
+
+struct FloatingSidebar: View {
+    @Environment(Monitor.self) private var monitor
+    @Binding var appearance: String
+
+    var body: some View {
+        @Bindable var ui = monitor.ui
+        VStack(spacing: 0) {
+            // The window's close, minimize, and zoom buttons sit over this row.
+            HStack {
+                Spacer()
+                SidebarToggle().buttonStyle(.borderless)
+            }
+            .frame(height: 30)
+            .padding(.top, 6)
+            .padding(.horizontal, 12)
+            List(Section.allCases, selection: Binding<Section?>(
+                get: { ui.section },
+                set: { if let value = $0 { ui.section = value } })
+            ) { item in
+                Label(item.rawValue, systemImage: item.symbol).tag(item)
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            Picker("Appearance", selection: $appearance) {
+                ForEach(Appearance.allCases) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(12)
+        }
+        .frame(maxHeight: .infinity)
+        .floatingGlass(cornerRadius: 18)
+    }
+}
+
+struct DetailColumn: View {
+    @Environment(Monitor.self) private var monitor
+    let leadingInset: CGFloat
+
+    var body: some View {
+        let ui = monitor.ui
+        ScrollView {
+            VStack(spacing: 14) {
+                LinkBanner()
+                switch ui.section {
+                case .live: LiveView()
+                case .device: DeviceView()
+                case .packets: PacketsView()
+                case .control: ControlView()
+                }
+            }
+            .padding(EdgeInsets(top: 8, leading: leadingInset + 12, bottom: 24, trailing: 20))
+        }
+        .foregroundStyle(P.ink)
+        .font(.system(size: 14))
+        .safeAreaInset(edge: .top, spacing: 0) {
+            DetailHeader(leadingInset: leadingInset)
+        }
+    }
+}
+
+struct DetailHeader: View {
+    @Environment(Monitor.self) private var monitor
+    let leadingInset: CGFloat
+
+    var body: some View {
+        let _ = monitor.tick
+        HStack(spacing: 12) {
+            if !monitor.ui.sidebarVisible {
+                // Clears the window's close, minimize, and zoom buttons.
+                SidebarToggle().glassControl().padding(.leading, 76)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text(monitor.ui.section.rawValue).font(.system(size: 15, weight: .semibold))
+                if let name = monitor.connected?.name {
+                    Text(name).font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 12)
+        }
+        .frame(height: 36)
+        .padding(.leading, leadingInset + 12)
+        .padding(.trailing, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .background(P.window.opacity(0.92))
+    }
+}
+
+/// Status and recording stay in the native toolbar, which draws true Liquid Glass controls.
 struct MonitorToolbar: ToolbarContent {
     @Environment(Monitor.self) private var monitor
 
@@ -123,15 +216,25 @@ struct MonitorToolbar: ToolbarContent {
         return parts.joined(separator: " · ")
     }
 
+    private var status: some View {
+        let _ = monitor.tick
+        return HStack(spacing: 7) {
+            Circle().fill(dot).frame(width: 8, height: 8).accessibilityHidden(true)
+            Text(statusText).monospacedDigit().foregroundStyle(.secondary).fixedSize()
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     var body: some ToolbarContent {
-        ToolbarItem(placement: .primaryAction) {
-            let _ = monitor.tick
-            HStack(spacing: 7) {
-                Circle().fill(dot).frame(width: 8, height: 8).accessibilityHidden(true)
-                Text(statusText).monospacedDigit().fixedSize()
-            }
-            .padding(.horizontal, 8)
-            .accessibilityElement(children: .combine)
+        // Status isn't a control, so it sits on the bar without a glass capsule of its own.
+        // The bar has no title, so a flexible spacer keeps these at the trailing edge.
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
+            ToolbarItem(placement: .primaryAction) { status }
+                .sharedBackgroundVisibility(.hidden)
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        } else {
+            ToolbarItem(placement: .primaryAction) { status }
         }
         ToolbarItem(placement: .primaryAction) {
             Button {
@@ -142,6 +245,40 @@ struct MonitorToolbar: ToolbarContent {
                     .labelStyle(.titleAndIcon)
             }
             .tint(monitor.recorder == nil ? nil : .red)
+        }
+    }
+}
+
+private extension View {
+    /// The system's Liquid Glass where available, otherwise its closest translucent material.
+    @ViewBuilder
+    func floatingGlass(cornerRadius: CGFloat) -> some View {
+        if #available(macOS 26.0, *) {
+            glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .shadow(color: .black.opacity(0.15), radius: 12, y: 2)
+        }
+    }
+
+    @ViewBuilder
+    func glassControl() -> some View {
+        if #available(macOS 26.0, *) {
+            buttonStyle(.glass)
+        } else {
+            buttonStyle(.bordered)
+        }
+    }
+
+    /// Removes the window title and hard line from the toolbar, leaving only its controls.
+    @ViewBuilder
+    func chromelessToolbar() -> some View {
+        if #available(macOS 26.0, *) {
+            toolbar(removing: .title).toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        } else if #available(macOS 15.0, *) {
+            toolbar(removing: .title)
+        } else {
+            self
         }
     }
 }
@@ -170,7 +307,7 @@ struct LinkBanner: View {
         case .unsupported:
             banner("This Mac doesn't support Bluetooth LE, which the tester needs.") { EmptyView() }
         case .scanning:
-            banner("Looking for your tester. Check that it's powered on and its Bluetooth is enabled.") { EmptyView() }
+            banner("Looking for your tester. Check that it's powered on, its Bluetooth is enabled, and no other app or phone is connected to it. It only accepts one connection at a time.") { EmptyView() }
         case .noData:
             banner("Your tester is connected but has stopped sending data. Trying to restart the stream.") { EmptyView() }
         default:
