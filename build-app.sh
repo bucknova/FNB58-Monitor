@@ -1,5 +1,7 @@
 #!/bin/zsh
-# Builds a universal "dist/FNB58 Monitor.app" and "dist/FNB58-Monitor.dmg" for Apple Silicon and Intel.
+# Builds a universal "dist/FNB58 Monitor.app", plus two DMGs:
+#   dist/FNB58-Monitor-Universal.dmg     Apple Silicon and Intel
+#   dist/FNB58-Monitor-AppleSilicon.dmg  Apple Silicon only, and smaller
 # Needs only the Xcode command line tools.
 # Optional: VERSION sets the marketing version and BUILD_NUMBER sets the build number.
 set -euo pipefail
@@ -8,8 +10,7 @@ cd "${0:A:h}"
 swift run -c release fnbcheck Tests
 
 APP="dist/FNB58 Monitor.app"
-DMG="dist/FNB58-Monitor.dmg"
-rm -rf "$APP" "$DMG"
+rm -rf "$APP" dist/*.dmg
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -48,16 +49,34 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 # Name the app in its signature's requirement so macOS can treat rebuilds as the same app and
 # keep its Bluetooth permission. Ad-hoc signing would otherwise tie it to this exact binary.
-codesign --force --sign - --identifier local.fnb58monitor \
-  --requirements '=designated => identifier "local.fnb58monitor"' "$APP"
-codesign --verify --strict "$APP"
+sign_app() {
+  codesign --force --sign - --identifier local.fnb58monitor \
+    --requirements '=designated => identifier "local.fnb58monitor"' "$1"
+  codesign --verify --strict "$1"
+}
 
-STAGE="$TMP/dmg"
+make_dmg() {
+  local stage="$1" dmg="$2"
+  ln -s /Applications "$stage/Applications"
+  hdiutil create -quiet -volname "FNB58 Monitor" -srcfolder "$stage" -ov -format UDZO "$dmg"
+  hdiutil verify -quiet "$dmg"
+  echo "Built $dmg ($(du -h "$dmg" | cut -f1 | tr -d ' '))"
+}
+
+sign_app "$APP"
+echo "Built $APP ($(lipo -archs "$APP/Contents/MacOS/FNB58Monitor"))"
+
+STAGE="$TMP/universal"
 mkdir "$STAGE"
 cp -R "$APP" "$STAGE/"
-ln -s /Applications "$STAGE/Applications"
-hdiutil create -quiet -volname "FNB58 Monitor" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
-hdiutil verify -quiet "$DMG"
+make_dmg "$STAGE" dist/FNB58-Monitor-Universal.dmg
 
-echo "Built $APP ($(lipo -archs "$APP/Contents/MacOS/FNB58Monitor"))"
-echo "Built $DMG"
+STAGE="$TMP/applesilicon"
+mkdir "$STAGE"
+cp -R "$APP" "$STAGE/"
+THIN="$STAGE/FNB58 Monitor.app/Contents/MacOS/FNB58Monitor"
+lipo "$THIN" -thin arm64 -output "$TMP/FNB58Monitor-thin"
+cp "$TMP/FNB58Monitor-thin" "$THIN"
+[[ "$(lipo -archs "$THIN")" == "arm64" ]]
+sign_app "$STAGE/FNB58 Monitor.app"
+make_dmg "$STAGE" dist/FNB58-Monitor-AppleSilicon.dmg

@@ -18,7 +18,12 @@ This is an independent project, not affiliated with or endorsed by FNIRSI.
 
 ## Download
 
-Tagged versions are published on the [Releases page](https://github.com/bucknova/FNB58-Monitor/releases) as a universal DMG for Apple Silicon and Intel. Every push to `main` also builds one, available from that run's artifacts on the [Actions page](https://github.com/bucknova/FNB58-Monitor/actions) to anyone signed in to GitHub.
+Tagged versions are published on the [Releases page](https://github.com/bucknova/FNB58-Monitor/releases) in two forms:
+
+- **`FNB58-Monitor-AppleSilicon.dmg`:** smaller, for Macs with an M-series chip
+- **`FNB58-Monitor-Universal.dmg`:** for both Apple Silicon and Intel Macs
+
+Every push to `main` also builds both, available from that run's artifacts on the [Actions page](https://github.com/bucknova/FNB58-Monitor/actions) to anyone signed in to GitHub.
 
 Open the DMG and drag the app to Applications. These builds are ad-hoc signed rather than signed with an Apple Developer ID, so macOS blocks them the first time. To open one, either:
 
@@ -47,7 +52,7 @@ cd FNB58-Monitor
 ./build-app.sh
 ```
 
-This runs the protocol checks against recordings from a real tester, then creates a universal `dist/FNB58 Monitor.app` and `dist/FNB58-Monitor.dmg`.
+This runs the protocol checks against recordings from a real tester, then creates a universal `dist/FNB58 Monitor.app` and both DMGs in `dist/`.
 
 ## Status
 
