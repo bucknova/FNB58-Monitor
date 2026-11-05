@@ -39,7 +39,7 @@ jobs:
       - name: Confirm both architectures and the SDK version
         run: |
           BIN="dist/FNB58 Monitor.app/Contents/MacOS/FNB58Monitor"
-          lipo -verify_arch arm64 x86_64 "$BIN"
+          lipo "$BIN" -verify_arch arm64 x86_64
           for ARCH in arm64 x86_64; do
             SDK="$(vtool -arch "$ARCH" -show-build "$BIN" | awk '/sdk/ {print $2}')"
             echo "$ARCH built against SDK $SDK"
